@@ -1,7 +1,7 @@
 """Main application entry point.
 
-Implements an async-compatible app loop supporting both native desktop execution
-and web deployment (pygbag/WASM).
+Drives the simulation and renderer through an async-compatible app loop.
+Compatible with desktop execution and web deployment (pygbag/WASM).
 """
 
 import asyncio
@@ -9,24 +9,27 @@ import sys
 import pygame
 
 from src.config import Config
+from src.renderer import Renderer
 from src.simulation import Simulation
 
 
 async def main() -> None:
+    pygame.init()
     config = Config()
     sim = Simulation(config=config)
+    renderer = Renderer(config=config)
 
-    pygame.init()
     screen = pygame.display.set_mode((int(config.world_width), int(config.world_height)))
     pygame.display.set_caption("Predator–Prey Balance Ecosystem")
     clock = pygame.time.Clock()
-    font = pygame.font.SysFont("monospace", 16)
 
     running = True
     paused = False
 
     while running:
-        dt = clock.tick(60) / 1000.0
+        raw_dt = clock.tick(60) / 1000.0
+        # Cap dt to avoid large simulation jumps on window drag
+        dt = min(raw_dt, 0.1)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -36,33 +39,17 @@ async def main() -> None:
                     paused = not paused
                 elif event.key == pygame.K_r:
                     sim = Simulation(config=config)
+                elif event.key == pygame.K_v:
+                    renderer.cycle_view_mode()
 
         if not paused:
             sim.step(dt)
 
-        # Basic shape rendering for Milestone 1 / verification
-        screen.fill((30, 34, 42))
-
-        # Draw Prey (green circles)
-        for prey in sim.prey_list:
-            pygame.draw.circle(screen, (80, 220, 100), (int(prey.x), int(prey.y)), 4)
-
-        # Draw Predators (red/orange circles)
-        for pred in sim.predator_list:
-            pygame.draw.circle(screen, (230, 70, 60), (int(pred.x), int(pred.y)), 6)
-
-        # Overlay HUD
-        status_text = (
-            f"Time: {sim.time:5.1f}s | "
-            f"Rabbits (Prey): {sim.prey_count:3d} | "
-            f"Foxes (Predators): {sim.predator_count:3d} | "
-            f"{'PAUSED' if paused else 'RUNNING'} [Space: Pause, R: Reset]"
-        )
-        hud_surface = font.render(status_text, True, (240, 240, 240))
-        screen.blit(hud_surface, (16, 16))
+        # Draw scene via decoupled renderer
+        renderer.draw(screen, sim, dt, paused, clock.get_fps())
 
         pygame.display.flip()
-        await asyncio.sleep(0)  # Cooperative yield for pygbag browser loop
+        await asyncio.sleep(0)  # Cooperative yield for pygbag WASM loop
 
     pygame.quit()
 
