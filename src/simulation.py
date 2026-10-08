@@ -10,9 +10,19 @@ import math
 import random
 from typing import Dict, List, Optional, Tuple
 
+from dataclasses import dataclass
 from src.config import Config
 from src.entities import Animal, AnimalState, Prey, Predator
 from src.metrics import SimulationMetrics
+
+
+@dataclass(frozen=True)
+class DeathEvent:
+    species: str
+    x: float
+    y: float
+    heading: float
+    cause: str
 
 
 class SpatialGrid:
@@ -140,6 +150,8 @@ class Simulation:
         # Build fast spatial lookup grids
         self._rebuild_spatial_grids()
 
+        self.recent_deaths: List[DeathEvent] = []
+
         # 1. Update Prey behaviors
         for prey in self.prey_list:
             if not prey.alive:
@@ -150,6 +162,9 @@ class Simulation:
             prey.update_behavior(dt, cfg, self.rng, nearest_pred)  # type: ignore
             if not prey.alive and prey.state == AnimalState.DIE:
                 self.metrics.total_prey_died_age += 1
+                self.recent_deaths.append(
+                    DeathEvent("rabbit", prey.x, prey.y, prey.heading, "age")
+                )
 
         # 2. Update Predator behaviors & hunting
         for pred in self.predator_list:
@@ -163,12 +178,21 @@ class Simulation:
                 caught.alive = False
                 caught.state = AnimalState.DIE
                 self.metrics.total_prey_eaten += 1
+                self.recent_deaths.append(
+                    DeathEvent("rabbit", caught.x, caught.y, caught.heading, "eaten")
+                )
 
             if not pred.alive:
                 if pred.energy <= 0:
                     self.metrics.total_predators_starved += 1
+                    self.recent_deaths.append(
+                        DeathEvent("wolf", pred.x, pred.y, pred.heading, "starved")
+                    )
                 elif pred.age >= cfg.predator_max_age:
                     self.metrics.total_predators_died_age += 1
+                    self.recent_deaths.append(
+                        DeathEvent("wolf", pred.x, pred.y, pred.heading, "age")
+                    )
 
         # 3. Reproduction phase
         current_prey_count = len([p for p in self.prey_list if p.alive])

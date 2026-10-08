@@ -194,6 +194,7 @@ class Predator(Animal):
         super().__init__(entity_id, x, y, heading, speed)
         self.energy = 35.0 if initial_energy is None else float(initial_energy)
         self.eat_timer = 0.0
+        self.target_prey_id: Optional[int] = None
 
     def update_behavior(
         self,
@@ -219,7 +220,7 @@ class Predator(Animal):
             self.state = AnimalState.DIE
             return None
 
-        # Handling brief eating state pause
+        # Handling eating state pause (plays attack/feed animation over caught prey)
         if self.eat_timer > 0:
             self.eat_timer = max(0.0, self.eat_timer - dt)
             self.state = AnimalState.EAT
@@ -236,6 +237,8 @@ class Predator(Animal):
         if nearest_prey and nearest_prey.alive:
             dist = self.distance_to(nearest_prey)
             if dist <= config.predator_vision_radius:
+                self.target_prey_id = nearest_prey.entity_id
+
                 # Check if prey is caught
                 if dist <= config.predator_catch_radius:
                     caught_prey = nearest_prey
@@ -243,18 +246,21 @@ class Predator(Animal):
                         config.predator_max_energy,
                         self.energy + config.predator_energy_gain_eat
                     )
-                    self.eat_timer = 0.25  # Short pause to eat
+                    self.eat_timer = 0.65  # Full attack/feasting animation sequence
                     self.state = AnimalState.EAT
+                    self.target_prey_id = None
                     return caught_prey
 
-                # Pursue prey
+                # Relentless pursuit
                 self.state = AnimalState.CHASE
                 self.move_toward(nearest_prey.x, nearest_prey.y, config.predator_chase_speed, dt)
                 self.energy -= config.predator_energy_decay_chase * dt
                 self.enforce_boundaries(config)
             else:
+                self.target_prey_id = None
                 self._wander_and_burn(rng, dt, config)
         else:
+            self.target_prey_id = None
             self._wander_and_burn(rng, dt, config)
 
         # Starvation check

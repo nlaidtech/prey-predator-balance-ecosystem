@@ -98,6 +98,7 @@ class Renderer:
         # Entity visual clocks (id -> (timer, frame_idx))
         self.predator_anim_states: Dict[int, Tuple[float, int]] = {}
         self.prey_anim_states: Dict[int, Tuple[float, int]] = {}
+        self.corpses: List[Dict] = []
 
         # Colors
         self.bg_color = (24, 28, 36)
@@ -120,8 +121,23 @@ class Renderer:
         """Draws the complete scene for the given simulation state."""
         surface.fill(self.bg_color)
 
+        # Ingest recent deaths for corpse animations
+        if hasattr(sim, "recent_deaths") and sim.recent_deaths:
+            for death in sim.recent_deaths:
+                self.corpses.append({
+                    "species": death.species,
+                    "x": death.x,
+                    "y": death.y,
+                    "heading": death.heading,
+                    "timer": 0.0,
+                    "cause": death.cause,
+                })
+
         # Draw grid backdrop for subtle spatial reference
         self._draw_grid_backdrop(surface)
+
+        # Draw dying corpses on ground first
+        self._draw_corpses(surface, dt)
 
         # Draw Rabbits (Prey)
         self._draw_prey(surface, sim, dt)
@@ -140,6 +156,43 @@ class Renderer:
             pygame.draw.line(surface, line_color, (x, 0), (x, h))
         for y in range(0, h, cell_size):
             pygame.draw.line(surface, line_color, (0, y), (w, y))
+
+    def _draw_corpses(self, surface: pygame.Surface, dt: float) -> None:
+        surviving_corpses = []
+        for corpse in self.corpses:
+            corpse["timer"] += dt
+            if corpse["timer"] >= 1.5:
+                continue
+            surviving_corpses.append(corpse)
+
+            if self.view_mode == ViewMode.SHAPES:
+                col = (110, 110, 110) if corpse["species"] == "wolf" else (70, 130, 80)
+                pygame.draw.circle(surface, col, (int(corpse["x"]), int(corpse["y"])), 3)
+                continue
+
+            sprite_set = self.sprite_cache.rabbit if corpse["species"] == "rabbit" else self.sprite_cache.wolf
+            frames = sprite_set.anims.get("die", [])
+            if not frames:
+                continue
+
+            # Play 5 collapse frames across 0.6 seconds, then remain on ground
+            frame_idx = min(len(frames) - 1, int(corpse["timer"] / 0.12))
+            frame = frames[frame_idx]
+
+            if math.cos(corpse["heading"]) < 0:
+                frame = pygame.transform.flip(frame, True, False)
+
+            # Fade alpha in final 0.5s
+            if corpse["timer"] > 1.0:
+                fade = max(0.0, min(1.0, (1.5 - corpse["timer"]) / 0.5))
+                alpha = int(255 * fade)
+                frame = frame.copy()
+                frame.set_alpha(alpha)
+
+            rect = frame.get_rect(center=(int(corpse["x"]), int(corpse["y"])))
+            surface.blit(frame, rect)
+
+        self.corpses = surviving_corpses
 
     def _draw_prey(self, surface: pygame.Surface, sim: Simulation, dt: float) -> None:
         active_ids = set()
@@ -260,6 +313,12 @@ class Renderer:
                 continue
             active_ids.add(pred.entity_id)
             px, py = int(pred.x), int(pred.y)
+
+            # Stalking / hunt lock sightline to target prey
+            if pred.state == AnimalState.CHASE and getattr(pred, "target_prey_id", None):
+                target = next((p for p in sim.prey_list if p.entity_id == pred.target_prey_id and p.alive), None)
+                if target:
+                    pygame.draw.line(surface, (230, 60, 50), (px, py), (int(target.x), int(target.y)), 1)
 
             if self.view_mode == ViewMode.SHAPES:
                 self._draw_predator_shape(surface, pred, px, py)

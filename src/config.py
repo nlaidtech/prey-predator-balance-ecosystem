@@ -33,9 +33,9 @@ class Config:
 
     # Predator (Fox) Parameters
     predator_wander_speed: float = 75.0
-    predator_chase_speed: float = 135.0
+    predator_chase_speed: float = 142.0
     predator_vision_radius: float = 120.0
-    predator_catch_radius: float = 15.0
+    predator_catch_radius: float = 18.0
     predator_initial_energy: float = 35.0
     predator_max_energy: float = 65.0
     predator_energy_decay_wander: float = 2.0   # Energy burned per sec while wandering
