@@ -1,7 +1,7 @@
 """Main application entry point.
 
-Drives the simulation and renderer through an async-compatible app loop.
-Compatible with desktop execution and web deployment (pygbag/WASM).
+Runs a high-performance 60 FPS event loop on desktop while maintaining
+async compatibility for web builds (pygbag/WASM).
 """
 
 import asyncio
@@ -13,22 +13,23 @@ from src.renderer import Renderer
 from src.simulation import Simulation
 
 
-async def main() -> None:
+def run_loop(config: Config, is_async: bool = False):
     pygame.init()
-    config = Config()
-    sim = Simulation(config=config)
-    renderer = Renderer(config=config)
-
     screen = pygame.display.set_mode((int(config.world_width), int(config.world_height)))
     pygame.display.set_caption("Predator–Prey Balance Ecosystem")
     clock = pygame.time.Clock()
+
+    sim = Simulation(config=config)
+    renderer = Renderer(config=config)
+
+    print(f"Predator–Prey Ecosystem running on desktop! (Window: {int(config.world_width)}x{int(config.world_height)})", flush=True)
+    print("Controls: [Space] Pause/Resume | [R] Reset | [V] Switch View Mode", flush=True)
 
     running = True
     paused = False
 
     while running:
         raw_dt = clock.tick(60) / 1000.0
-        # Cap dt to avoid large simulation jumps on window drag
         dt = min(raw_dt, 0.1)
 
         for event in pygame.event.get():
@@ -45,14 +46,27 @@ async def main() -> None:
         if not paused:
             sim.step(dt)
 
-        # Draw scene via decoupled renderer
         renderer.draw(screen, sim, dt, paused, clock.get_fps())
-
         pygame.display.flip()
-        await asyncio.sleep(0)  # Cooperative yield for pygbag WASM loop
+
+        if is_async:
+            yield
 
     pygame.quit()
 
 
+async def main_async() -> None:
+    config = Config()
+    gen = run_loop(config, is_async=True)
+    for _ in gen:
+        await asyncio.sleep(0)
+
+
+def main() -> None:
+    config = Config()
+    # On desktop, run direct synchronous loop for maximum responsiveness
+    list(run_loop(config, is_async=False))
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
