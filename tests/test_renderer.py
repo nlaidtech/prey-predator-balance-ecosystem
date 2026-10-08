@@ -42,8 +42,9 @@ class TestRenderer(unittest.TestCase):
         self.assertEqual(self.renderer.view_mode, initial)
 
     def test_terrain_cache_assets_loaded(self):
-        """Verifies that terrain ground tiles and natural props are loaded."""
+        """Verifies that terrain ground tiles, landmarks, and natural props are loaded."""
         self.assertGreater(len(self.renderer.terrain_cache.ground_tiles), 0)
+        self.assertGreater(len(self.renderer.terrain_cache.landmarks), 0)
         self.assertGreater(len(self.renderer.terrain_cache.props), 0)
 
     def test_click_ripple_and_scenic_banner_lifecycle(self):

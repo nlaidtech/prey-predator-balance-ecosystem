@@ -90,10 +90,11 @@ class SpriteCache:
 
 
 class TerrainSpriteCache:
-    """Loads and caches sliced biome ground tiles and decorative landscape props."""
+    """Loads and caches sliced biome ground tiles, landmarks, and decorative landscape props."""
 
     def __init__(self) -> None:
         self.ground_tiles: Dict[BiomeType, pygame.Surface] = {}
+        self.landmarks: Dict[str, pygame.Surface] = {}
         self.props: Dict[str, pygame.Surface] = {}
         self._load_terrain_assets()
 
@@ -118,20 +119,24 @@ class TerrainSpriteCache:
                 except pygame.error:
                     pass
 
-        # 2. Landscape Props
+        # 2. Landmarks & Props
         for sub in ["meadow", "forest", "highlands", "thickets", "river"]:
             s_dir = os.path.join(base_dir, sub)
             if not os.path.isdir(s_dir):
                 continue
             for fname in os.listdir(s_dir):
-                if fname.startswith("prop_") and fname.endswith(".png"):
-                    prop_key = os.path.splitext(fname)[0]
-                    prop_p = os.path.join(s_dir, fname)
-                    try:
-                        surf = pygame.image.load(prop_p)
-                        self.props[prop_key] = surf
-                    except pygame.error:
-                        pass
+                if not fname.endswith(".png"):
+                    continue
+                name_key = os.path.splitext(fname)[0]
+                p = os.path.join(s_dir, fname)
+                try:
+                    surf = pygame.image.load(p)
+                    if fname.startswith("landmark_"):
+                        self.landmarks[name_key] = surf
+                    elif fname.startswith("prop_"):
+                        self.props[name_key] = surf
+                except pygame.error:
+                    pass
 
 
 class Renderer:
@@ -210,8 +215,23 @@ class Renderer:
         self.ripples: List[Dict] = []
         self.scenic_banner: Optional[Dict] = None
 
+        # Scaled tile cache for high-performance ground rendering
+        self._scaled_tile_cache: Dict[Tuple[int, int, int], pygame.Surface] = {}
+
         # Precompute procedural landscape decor (wildflowers, crags, dappled light)
         self._init_procedural_decor(config.world_width, config.world_height)
+
+    def _get_scaled_tile(self, surf: pygame.Surface, width: int, height: int) -> pygame.Surface:
+        """Retrieves or caches a smoothscaled tile surface for current dimensions."""
+        key = (id(surf), width, height)
+        cached = self._scaled_tile_cache.get(key)
+        if cached is not None:
+            return cached
+        if len(self._scaled_tile_cache) > 128:
+            self._scaled_tile_cache.clear()
+        scaled = pygame.transform.smoothscale(surf, (width, height))
+        self._scaled_tile_cache[key] = scaled
+        return scaled
 
     def _init_procedural_decor(self, world_w: float, world_h: float) -> None:
         """Precomputes deterministic landscape decor elements (flowers, crags, dappled light)."""
@@ -418,7 +438,7 @@ class Renderer:
             BiomeType.MEADOW: "OPEN MEADOW & PLAINS",
         }
 
-        # 1. Base zone fills & procedural natural decor
+        # 1. Base zone fills, authentic pixel-art ground tiling & natural decor
         for zone in terrain.zones:
             if not cam.is_rect_visible(zone.min_x, zone.min_y, zone.max_x, zone.max_y):
                 continue
@@ -427,23 +447,36 @@ class Renderer:
             sx2, sy2 = cam.world_to_screen(zone.max_x, zone.max_y)
             rect = pygame.Rect(int(sx1), int(sy1), int(sx2 - sx1) + 1, int(sy2 - sy1) + 1)
 
-            # Base rich tone
+            # Base rich tone undertone
             col = self.biome_colors[zone.biome_type]
             pygame.draw.rect(surface, col, rect)
 
-            # Draw procedural natural features (when not in Plain Shapes mode)
+            # Draw authentic tiled pixel-art ground texture (unless in plain Shapes mode)
             if self.view_mode != ViewMode.SHAPES:
-                if zone.biome_type == BiomeType.MEADOW:
-                    # Draw rolling prairie waves
-                    wave_y = zone.min_y + 80.0
-                    while wave_y < zone.max_y:
-                        if vp_min_y - 20 <= wave_y <= vp_max_y + 20:
-                            wsx1, wsy = cam.world_to_screen(zone.min_x, wave_y)
-                            wsx2, _ = cam.world_to_screen(zone.max_x, wave_y)
-                            pygame.draw.line(surface, (54, 134, 72), (int(wsx1), int(wsy)), (int(wsx2), int(wsy)), max(1, int(2 * cam.zoom)))
-                        wave_y += 180.0
+                tile = self.terrain_cache.ground_tiles.get(zone.biome_type)
+                if tile:
+                    int_min_x = max(zone.min_x, vp_min_x)
+                    int_max_x = min(zone.max_x, vp_max_x)
+                    int_min_y = max(zone.min_y, vp_min_y)
+                    int_max_y = min(zone.max_y, vp_max_y)
+                    if int_min_x < int_max_x and int_min_y < int_max_y:
+                        tw, th = tile.get_width(), tile.get_height()
+                        sw = max(2, int(tw * cam.zoom))
+                        sh = max(2, int(th * cam.zoom))
+                        scaled_tile = self._get_scaled_tile(tile, sw, sh)
+                        c_start = int(int_min_x // tw)
+                        c_end = int(int_max_x // tw) + 1
+                        r_start = int(int_min_y // th)
+                        r_end = int(int_max_y // th) + 1
+                        for r in range(r_start, r_end):
+                            wy = r * th
+                            for c in range(c_start, c_end):
+                                wx = c * tw
+                                tsx, tsy = cam.world_to_screen(wx, wy)
+                                surface.blit(scaled_tile, (int(tsx), int(tsy)))
 
-                    # Draw vibrant wildflowers
+                # Layer atmospheric natural accents
+                if zone.biome_type == BiomeType.MEADOW:
                     for fx, fy, fcol, fsz in self.decor_flowers:
                         if vp_min_x <= fx <= vp_max_x and vp_min_y <= fy <= vp_max_y:
                             fsx, fsy = cam.world_to_screen(fx, fy)
@@ -453,7 +486,6 @@ class Renderer:
                                 pygame.draw.circle(surface, (255, 255, 240), (int(fsx), int(fsy)), max(1, r - 2))
 
                 elif zone.biome_type == BiomeType.DENSE_FOREST:
-                    # Draw soft swaying dappled sunlight canopy patches
                     for lx, ly, rad, phase in self.decor_dappled_light:
                         if vp_min_x - rad <= lx <= vp_max_x + rad and vp_min_y - rad <= ly <= vp_max_y + rad:
                             drift_x = lx + math.sin(current_time * 0.8 + phase) * 8.0
@@ -465,7 +497,6 @@ class Renderer:
                             surface.blit(light_surf, (int(lsx - srad), int(lsy - srad)))
 
                 elif zone.biome_type == BiomeType.HIGHLANDS:
-                    # Draw rock contours and stone crags
                     for cx, cy, w, h, c_col in self.decor_crags:
                         if vp_min_x <= cx <= vp_max_x and vp_min_y <= cy <= vp_max_y:
                             csx, csy = cam.world_to_screen(cx, cy)
@@ -474,7 +505,6 @@ class Renderer:
                             pygame.draw.ellipse(surface, c_col, (int(csx), int(csy), sw, sh))
 
                 elif zone.biome_type == BiomeType.THICKETS:
-                    # Draw woody briar twigs and root textures
                     for bx, by, length, angle in self.decor_brambles:
                         if vp_min_x <= bx <= vp_max_x and vp_min_y <= by <= vp_max_y:
                             bsx, bsy = cam.world_to_screen(bx, by)
@@ -483,8 +513,36 @@ class Renderer:
                             esx, esy = cam.world_to_screen(ex, ey)
                             pygame.draw.line(surface, (92, 82, 56), (int(bsx), int(bsy)), (int(esx), int(esy)), max(1, int(1.5 * cam.zoom)))
 
-            # Zone typographic watermark & boundary details (Toggle 'B')
-            if self.show_biome_watermarks:
+        # 2. Draw organic winding river with sandbanks & animated water current ripples
+        self._draw_river_organic(surface, terrain, cam, current_time)
+
+        # 3. Draw Authentic Pixel-Art Landmark Assemblies (Crossroads, Cliff Plateau, Watering Hole Basin)
+        if self.view_mode != ViewMode.SHAPES and hasattr(terrain, "landmarks") and terrain.landmarks:
+            for lm in terrain.landmarks:
+                if not cam.is_circle_visible(lm.x, lm.y, radius=450.0):
+                    continue
+                surf = self.terrain_cache.landmarks.get(lm.landmark_name)
+                if not surf:
+                    surf = self.terrain_cache.props.get(lm.landmark_name)
+                if not surf:
+                    continue
+
+                sx, sy = cam.world_to_screen(lm.x, lm.y)
+                final_scale = cam.zoom * lm.scale
+                pw = max(4, int(surf.get_width() * final_scale))
+                ph = max(4, int(surf.get_height() * final_scale))
+                scaled_lm = self._get_scaled_tile(surf, pw, ph)
+                rect = scaled_lm.get_rect(center=(int(sx), int(sy)))
+                surface.blit(scaled_lm, rect)
+
+        # 4. Zone typographic watermark & boundary details (Toggle 'B')
+        if self.show_biome_watermarks:
+            for zone in terrain.zones:
+                if not cam.is_rect_visible(zone.min_x, zone.min_y, zone.max_x, zone.max_y):
+                    continue
+                sx1, sy1 = cam.world_to_screen(zone.min_x, zone.min_y)
+                sx2, sy2 = cam.world_to_screen(zone.max_x, zone.max_y)
+                rect = pygame.Rect(int(sx1), int(sy1), int(sx2 - sx1) + 1, int(sy2 - sy1) + 1)
                 self._draw_dashed_rect(surface, rect, (65, 85, 110), dash_len=8)
                 center_sx, center_sy = cam.world_to_screen(zone.center[0], zone.center[1])
                 lbl_text = watermark_labels.get(zone.biome_type, zone.biome_type.value)
@@ -492,9 +550,6 @@ class Renderer:
                 wm_surf.set_alpha(85)
                 wm_rect = wm_surf.get_rect(center=(int(center_sx), int(center_sy)))
                 surface.blit(wm_surf, wm_rect)
-
-        # 2. Draw organic winding river with sandbanks & animated current ripples
-        self._draw_river_organic(surface, terrain, cam, current_time)
 
     def _draw_river_organic(self, surface: pygame.Surface, terrain: TerrainMap, cam: Camera2D, current_time: float) -> None:
         """Draws winding river with curved shorelines, sandbars, and animated water current ripples."""

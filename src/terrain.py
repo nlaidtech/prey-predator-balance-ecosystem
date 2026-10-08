@@ -95,6 +95,16 @@ class TerrainProp:
 
 
 @dataclass(frozen=True)
+class TerrainLandmark:
+    landmark_id: str
+    landmark_name: str
+    biome_type: BiomeType
+    x: float
+    y: float
+    scale: float = 1.0
+
+
+@dataclass(frozen=True)
 class ScenicArea:
     area_id: str
     name: str
@@ -229,9 +239,70 @@ class TerrainMap:
             [1.0 for _ in range(self.grid_cols)] for _ in range(self.grid_rows)
         ]
 
-        # Natural landscape props (trees, boulders, bushes, flowers, logs)
+        # Natural landscape props and prominent territory landmarks
+        self.landmarks: List[TerrainLandmark] = []
+        self._generate_landmarks()
+
         self.props: List[TerrainProp] = []
         self._generate_props()
+
+    def _generate_landmarks(self) -> None:
+        """Places authentic pixel-art landmark assemblies at designated scenic centers."""
+        mid_x = self.width * 0.5
+        river_top = self.height * 0.4375
+        river_bottom = self.height * 0.5625
+
+        # 1. Meadow: Cobblestone Crossroads & Winding Trail
+        m_center_x = mid_x + (self.width - mid_x) * 0.5
+        m_center_y = river_bottom + (self.height - river_bottom) * 0.5
+        self.landmarks.append(TerrainLandmark(
+            landmark_id="meadow_crossroads",
+            landmark_name="landmark_crossroads",
+            biome_type=BiomeType.MEADOW,
+            x=m_center_x,
+            y=m_center_y,
+            scale=2.5,
+        ))
+        self.landmarks.append(TerrainLandmark(
+            landmark_id="meadow_trail_west",
+            landmark_name="landmark_winding_trail",
+            biome_type=BiomeType.MEADOW,
+            x=m_center_x - 380.0,
+            y=m_center_y + 110.0,
+            scale=2.3,
+        ))
+
+        # 2. River: Central Circular Watering Hole Basin & Satellite Ponds
+        r_center_x = self.width * 0.5
+        r_center_y = (river_top + river_bottom) * 0.5
+        self.landmarks.append(TerrainLandmark(
+            landmark_id="river_basin",
+            landmark_name="landmark_watering_hole_basin",
+            biome_type=BiomeType.RIVER,
+            x=r_center_x,
+            y=r_center_y,
+            scale=2.4,
+        ))
+
+        # 3. Highlands: Cliff Plateau & Staircase Ramp
+        h_center_x = mid_x * 0.5
+        h_center_y = river_top * 0.5
+        self.landmarks.append(TerrainLandmark(
+            landmark_id="highlands_plateau",
+            landmark_name="landmark_cliff_plateau",
+            biome_type=BiomeType.HIGHLANDS,
+            x=h_center_x - 130.0,
+            y=h_center_y,
+            scale=2.4,
+        ))
+        self.landmarks.append(TerrainLandmark(
+            landmark_id="highlands_ramp",
+            landmark_name="landmark_cliff_ramp",
+            biome_type=BiomeType.HIGHLANDS,
+            x=h_center_x + 180.0,
+            y=h_center_y + 30.0,
+            scale=2.4,
+        ))
 
     def _generate_props(self) -> None:
         """Generates deterministic landscape props across all 5 biomes."""
@@ -240,33 +311,36 @@ class TerrainMap:
 
         biome_prop_pool = {
             BiomeType.HIGHLANDS: [
-                ("prop_rock_large1", 1.0), ("prop_rock_large2", 1.0),
-                ("prop_rock_slabs", 0.9), ("prop_boulder", 0.8), ("prop_pine", 0.85)
+                ("prop_rock_large1", 1.2), ("prop_rock_large2", 1.2),
+                ("prop_rock_slabs", 1.1), ("prop_boulder", 1.0), ("prop_pine", 1.1),
+                ("prop_cave", 1.1),
             ],
             BiomeType.DENSE_FOREST: [
-                ("prop_canopy", 1.1), ("prop_tree", 0.95), ("prop_log", 0.8),
-                ("prop_stump", 0.85), ("prop_bush", 0.8)
+                ("prop_canopy", 1.3), ("prop_tree", 1.2), ("prop_log", 1.0),
+                ("prop_stump", 1.0), ("prop_bush", 0.95),
             ],
             BiomeType.RIVER: [
-                ("prop_pond1", 0.9), ("prop_pond2", 0.9),
-                ("prop_shore_left", 0.85), ("prop_shore_right", 0.85), ("prop_foam", 0.8)
+                ("prop_pond1", 1.3), ("prop_pond2", 1.3),
+                ("prop_pond_boulders", 1.3), ("prop_foam", 0.9), ("prop_foam_swirl", 0.9),
             ],
             BiomeType.THICKETS: [
-                ("prop_dense_bush1", 1.0), ("prop_dense_bush2", 1.0),
-                ("prop_briar_barrier", 0.9), ("prop_deadwood", 0.85), ("prop_berries", 0.75)
+                ("prop_dense_bush1", 1.2), ("prop_dense_bush2", 1.2),
+                ("prop_dense_refuge", 1.25), ("prop_briar_barrier", 1.1),
+                ("prop_deadwood", 1.1), ("prop_berries", 1.0), ("prop_blackberry", 1.0),
             ],
             BiomeType.MEADOW: [
-                ("prop_flowers", 0.85), ("prop_bush", 0.8), ("prop_rock", 0.75),
-                ("prop_log", 0.8), ("prop_tree", 0.9)
+                ("prop_flowers", 1.0), ("prop_poppy", 1.0), ("prop_bluebells", 1.0),
+                ("prop_clover", 0.9), ("prop_bush", 1.0), ("prop_rock", 1.0),
+                ("prop_log", 1.0), ("prop_tree", 1.1),
             ],
         }
 
         base_prop_counts = {
-            BiomeType.HIGHLANDS: 28,
-            BiomeType.DENSE_FOREST: 38,
-            BiomeType.RIVER: 20,
-            BiomeType.THICKETS: 34,
-            BiomeType.MEADOW: 36,
+            BiomeType.HIGHLANDS: 32,
+            BiomeType.DENSE_FOREST: 42,
+            BiomeType.RIVER: 22,
+            BiomeType.THICKETS: 38,
+            BiomeType.MEADOW: 40,
         }
 
         # Dynamically scale prop count with world dimensions for vast wilderness

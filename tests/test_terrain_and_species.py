@@ -116,6 +116,14 @@ class TestTerrainAndSpecies(unittest.TestCase):
         self.assertGreater(len(big_terrain.props), len(self.terrain.props))
         self.assertGreaterEqual(len(big_terrain.props), 300)
 
+    def test_landmarks_generated(self):
+        """Territory landmark assemblies are registered deterministically."""
+        self.assertGreaterEqual(len(self.terrain.landmarks), 5)
+        names = {lm.landmark_name for lm in self.terrain.landmarks}
+        self.assertIn("landmark_crossroads", names)
+        self.assertIn("landmark_watering_hole_basin", names)
+        self.assertIn("landmark_cliff_plateau", names)
+
 
 if __name__ == "__main__":
     unittest.main()
