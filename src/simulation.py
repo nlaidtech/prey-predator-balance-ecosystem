@@ -1,18 +1,66 @@
 """Headless simulation core for the predator-prey ecosystem.
 
 Implements the pure simulation rules, step loop, deterministic PRNG,
-entity spatial queries, reproduction, and metrics logging.
+spatial hashing queries for high performance, reproduction, and metrics logging.
 Contains ZERO rendering or UI dependencies.
 """
 
 from __future__ import annotations
 import math
 import random
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from src.config import Config
-from src.entities import AnimalState, Prey, Predator
+from src.entities import Animal, AnimalState, Prey, Predator
 from src.metrics import SimulationMetrics
+
+
+class SpatialGrid:
+    """Fast 2D grid partitioning for local spatial queries."""
+
+    def __init__(self, cell_size: float = 120.0) -> None:
+        self.cell_size = cell_size
+        self.grid: Dict[Tuple[int, int], List[Animal]] = {}
+
+    def clear(self) -> None:
+        self.grid.clear()
+
+    def insert(self, entity: Animal) -> None:
+        cx = int(entity.x // self.cell_size)
+        cy = int(entity.y // self.cell_size)
+        cell = (cx, cy)
+        if cell not in self.grid:
+            self.grid[cell] = [entity]
+        else:
+            self.grid[cell].append(entity)
+
+    def find_nearest_in_radius(
+        self,
+        x: float,
+        y: float,
+        radius: float,
+    ) -> Optional[Animal]:
+        cx = int(x // self.cell_size)
+        cy = int(y // self.cell_size)
+        cell_span = int(math.ceil(radius / self.cell_size))
+
+        nearest: Optional[Animal] = None
+        min_dist_sq = radius * radius
+
+        for dx in range(-cell_span, cell_span + 1):
+            for dy in range(-cell_span, cell_span + 1):
+                cell_entities = self.grid.get((cx + dx, cy + dy))
+                if not cell_entities:
+                    continue
+                for entity in cell_entities:
+                    if not entity.alive:
+                        continue
+                    dist_sq = (entity.x - x) ** 2 + (entity.y - y) ** 2
+                    if dist_sq < min_dist_sq:
+                        min_dist_sq = dist_sq
+                        nearest = entity
+
+        return nearest
 
 
 class Simulation:
@@ -30,8 +78,10 @@ class Simulation:
         self.predator_list: List[Predator] = []
         self.metrics = SimulationMetrics()
 
+        self.prey_grid = SpatialGrid(cell_size=120.0)
+        self.predator_grid = SpatialGrid(cell_size=120.0)
+
         self._initialize_population()
-        # Record initial snapshot at t=0
         self.metrics.record_snapshot(0.0, len(self.prey_list), len(self.predator_list))
 
     def _next_id(self) -> int:
@@ -71,51 +121,33 @@ class Simulation:
             )
             self.predator_list.append(predator)
 
-    def _find_nearest_predator(self, prey: Prey) -> Optional[Predator]:
-        nearest: Optional[Predator] = None
-        min_dist_sq = float("inf")
-        px, py = prey.x, prey.y
-
-        for pred in self.predator_list:
-            if not pred.alive:
-                continue
-            dx = pred.x - px
-            dy = pred.y - py
-            dist_sq = dx * dx + dy * dy
-            if dist_sq < min_dist_sq:
-                min_dist_sq = dist_sq
-                nearest = pred
-
-        return nearest
-
-    def _find_nearest_prey(self, predator: Predator) -> Optional[Prey]:
-        nearest: Optional[Prey] = None
-        min_dist_sq = float("inf")
-        px, py = predator.x, predator.y
-
+    def _rebuild_spatial_grids(self) -> None:
+        self.prey_grid.clear()
         for prey in self.prey_list:
-            if not prey.alive:
-                continue
-            dx = prey.x - px
-            dy = prey.y - py
-            dist_sq = dx * dx + dy * dy
-            if dist_sq < min_dist_sq:
-                min_dist_sq = dist_sq
-                nearest = prey
+            if prey.alive:
+                self.prey_grid.insert(prey)
 
-        return nearest
+        self.predator_grid.clear()
+        for pred in self.predator_list:
+            if pred.alive:
+                self.predator_grid.insert(pred)
 
     def step(self, dt: float) -> None:
         """Advances the simulation by dt seconds."""
         self.time += dt
         cfg = self.config
 
+        # Build fast spatial lookup grids
+        self._rebuild_spatial_grids()
+
         # 1. Update Prey behaviors
         for prey in self.prey_list:
             if not prey.alive:
                 continue
-            nearest_pred = self._find_nearest_predator(prey)
-            prey.update_behavior(dt, cfg, self.rng, nearest_pred)
+            nearest_pred = self.predator_grid.find_nearest_in_radius(
+                prey.x, prey.y, cfg.prey_vision_radius
+            )
+            prey.update_behavior(dt, cfg, self.rng, nearest_pred)  # type: ignore
             if not prey.alive and prey.state == AnimalState.DIE:
                 self.metrics.total_prey_died_age += 1
 
@@ -123,8 +155,10 @@ class Simulation:
         for pred in self.predator_list:
             if not pred.alive:
                 continue
-            nearest_prey = self._find_nearest_prey(pred)
-            caught = pred.update_behavior(dt, cfg, self.rng, nearest_prey)
+            nearest_prey = self.prey_grid.find_nearest_in_radius(
+                pred.x, pred.y, cfg.predator_vision_radius
+            )
+            caught = pred.update_behavior(dt, cfg, self.rng, nearest_prey)  # type: ignore
             if caught is not None and caught.alive:
                 caught.alive = False
                 caught.state = AnimalState.DIE
@@ -142,7 +176,6 @@ class Simulation:
         for prey in self.prey_list:
             if prey.can_reproduce(cfg, current_prey_count, self.rng, dt):
                 prey.reproduction_cooldown = cfg.prey_reproduction_cooldown
-                # Offspring spawns slightly offset
                 offset_dist = self.rng.uniform(5.0, 15.0)
                 offset_angle = self.rng.uniform(0, 2.0 * math.pi)
                 child = Prey(
