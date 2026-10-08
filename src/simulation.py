@@ -1,19 +1,21 @@
-"""Headless simulation core for the predator-prey ecosystem.
+"""Headless simulation core for the multi-species wildlife ecosystem.
 
-Implements the pure simulation rules, step loop, deterministic PRNG,
-spatial hashing queries for high performance, reproduction, and metrics logging.
-Contains ZERO rendering or UI dependencies.
+Coordinates 6 wildlife species across 5 territorial biomes, manages spatial queries,
+vegetation regeneration, reproduction, and death event streams.
+ZERO graphics dependencies.
 """
 
 from __future__ import annotations
 import math
 import random
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from dataclasses import dataclass
 from src.config import Config
-from src.entities import Animal, AnimalState, Prey, Predator
+from src.entities import Animal, AnimalState
 from src.metrics import SimulationMetrics
+from src.species import SPECIES_REGISTRY, SpeciesProfile
+from src.terrain import BiomeType, TerrainMap, TerrainZone
 
 
 @dataclass(frozen=True)
@@ -44,11 +46,12 @@ class SpatialGrid:
         else:
             self.grid[cell].append(entity)
 
-    def find_nearest_in_radius(
+    def find_nearest_candidate(
         self,
         x: float,
         y: float,
         radius: float,
+        predicate,
     ) -> Optional[Animal]:
         cx = int(x // self.cell_size)
         cy = int(y // self.cell_size)
@@ -65,6 +68,8 @@ class SpatialGrid:
                 for entity in cell_entities:
                     if not entity.alive:
                         continue
+                    if not predicate(entity):
+                        continue
                     dist_sq = (entity.x - x) ** 2 + (entity.y - y) ** 2
                     if dist_sq < min_dist_sq:
                         min_dist_sq = dist_sq
@@ -74,7 +79,7 @@ class SpatialGrid:
 
 
 class Simulation:
-    """Manages the ecosystem simulation state and rules."""
+    """Multi-species wildlife simulation manager."""
 
     def __init__(self, config: Optional[Config] = None, seed: Optional[int] = None) -> None:
         self.config = config if config is not None else Config()
@@ -84,169 +89,58 @@ class Simulation:
         self.time: float = 0.0
         self._next_entity_id: int = 1
 
-        self.prey_list: List[Prey] = []
-        self.predator_list: List[Predator] = []
+        self.terrain = TerrainMap(self.config.world_width, self.config.world_height)
+        self.animals: List[Animal] = []
         self.metrics = SimulationMetrics()
+        self.recent_deaths: List[DeathEvent] = []
+        self.spatial_grid = SpatialGrid(cell_size=120.0)
 
-        self.prey_grid = SpatialGrid(cell_size=120.0)
-        self.predator_grid = SpatialGrid(cell_size=120.0)
-
-        self._initialize_population()
-        self.metrics.record_snapshot(0.0, len(self.prey_list), len(self.predator_list))
+        self._spawn_initial_populations()
+        # Compatibility lists for legacy metrics and tests
+        self.metrics.record_snapshot(0.0, self.prey_count, self.predator_count)
 
     def _next_id(self) -> int:
         eid = self._next_entity_id
         self._next_entity_id += 1
         return eid
 
-    def _initialize_population(self) -> None:
-        pad = self.config.boundary_padding
-        w = self.config.world_width
-        h = self.config.world_height
+    def _spawn_initial_populations(self) -> None:
+        """Spawns each species strictly inside its designated native territory."""
+        spawn_counts = {
+            "rabbit": 80,
+            "deer": 18,
+            "goat": 16,
+            "fox": 10,
+            "wolf": 12,
+            "bear": 4,
+        }
 
-        for _ in range(self.config.initial_prey):
-            x = self.rng.uniform(pad, w - pad)
-            y = self.rng.uniform(pad, h - pad)
-            heading = self.rng.uniform(0, 2.0 * math.pi)
-            prey = Prey(
-                entity_id=self._next_id(),
-                x=x,
-                y=y,
-                heading=heading,
-                speed=self.config.prey_wander_speed,
-            )
-            self.prey_list.append(prey)
+        pad = 25.0
+        for sp_name, count in spawn_counts.items():
+            profile = SPECIES_REGISTRY[sp_name]
+            zone = self.terrain.get_home_zone_for(sp_name)
 
-        for _ in range(self.config.initial_predators):
-            x = self.rng.uniform(pad, w - pad)
-            y = self.rng.uniform(pad, h - pad)
-            heading = self.rng.uniform(0, 2.0 * math.pi)
-            predator = Predator(
-                entity_id=self._next_id(),
-                x=x,
-                y=y,
-                heading=heading,
-                speed=self.config.predator_wander_speed,
-                initial_energy=self.config.predator_initial_energy,
-            )
-            self.predator_list.append(predator)
-
-    def _rebuild_spatial_grids(self) -> None:
-        self.prey_grid.clear()
-        for prey in self.prey_list:
-            if prey.alive:
-                self.prey_grid.insert(prey)
-
-        self.predator_grid.clear()
-        for pred in self.predator_list:
-            if pred.alive:
-                self.predator_grid.insert(pred)
-
-    def step(self, dt: float) -> None:
-        """Advances the simulation by dt seconds."""
-        self.time += dt
-        cfg = self.config
-
-        # Build fast spatial lookup grids
-        self._rebuild_spatial_grids()
-
-        self.recent_deaths: List[DeathEvent] = []
-
-        # 1. Update Prey behaviors
-        for prey in self.prey_list:
-            if not prey.alive:
-                continue
-            nearest_pred = self.predator_grid.find_nearest_in_radius(
-                prey.x, prey.y, cfg.prey_vision_radius
-            )
-            prey.update_behavior(dt, cfg, self.rng, nearest_pred)  # type: ignore
-            if not prey.alive and prey.state == AnimalState.DIE:
-                self.metrics.total_prey_died_age += 1
-                self.recent_deaths.append(
-                    DeathEvent("rabbit", prey.x, prey.y, prey.heading, "age")
-                )
-
-        # 2. Update Predator behaviors & hunting
-        for pred in self.predator_list:
-            if not pred.alive:
-                continue
-            nearest_prey = self.prey_grid.find_nearest_in_radius(
-                pred.x, pred.y, cfg.predator_vision_radius
-            )
-            caught = pred.update_behavior(dt, cfg, self.rng, nearest_prey)  # type: ignore
-            if caught is not None and caught.alive:
-                caught.alive = False
-                caught.state = AnimalState.DIE
-                self.metrics.total_prey_eaten += 1
-                self.recent_deaths.append(
-                    DeathEvent("rabbit", caught.x, caught.y, caught.heading, "eaten")
-                )
-
-            if not pred.alive:
-                if pred.energy <= 0:
-                    self.metrics.total_predators_starved += 1
-                    self.recent_deaths.append(
-                        DeathEvent("wolf", pred.x, pred.y, pred.heading, "starved")
-                    )
-                elif pred.age >= cfg.predator_max_age:
-                    self.metrics.total_predators_died_age += 1
-                    self.recent_deaths.append(
-                        DeathEvent("wolf", pred.x, pred.y, pred.heading, "age")
-                    )
-
-        # 3. Reproduction phase
-        current_prey_count = len([p for p in self.prey_list if p.alive])
-        new_prey: List[Prey] = []
-        for prey in self.prey_list:
-            if prey.can_reproduce(cfg, current_prey_count, self.rng, dt):
-                prey.reproduction_cooldown = cfg.prey_reproduction_cooldown
-                offset_dist = self.rng.uniform(5.0, 15.0)
-                offset_angle = self.rng.uniform(0, 2.0 * math.pi)
-                child = Prey(
+            for _ in range(count):
+                x = self.rng.uniform(zone.min_x + pad, zone.max_x - pad)
+                y = self.rng.uniform(zone.min_y + pad, zone.max_y - pad)
+                heading = self.rng.uniform(0, 2.0 * math.pi)
+                animal = Animal(
                     entity_id=self._next_id(),
-                    x=prey.x + math.cos(offset_angle) * offset_dist,
-                    y=prey.y + math.sin(offset_angle) * offset_dist,
-                    heading=self.rng.uniform(0, 2.0 * math.pi),
-                    speed=cfg.prey_wander_speed,
+                    profile=profile,
+                    x=x,
+                    y=y,
+                    heading=heading,
+                    home_zone=zone,
                 )
-                child.enforce_boundaries(cfg)
-                child.reproduction_cooldown = cfg.prey_reproduction_cooldown * 0.5
-                new_prey.append(child)
-                self.metrics.total_prey_born += 1
+                self.animals.append(animal)
 
-        new_predators: List[Predator] = []
-        for pred in self.predator_list:
-            if pred.can_reproduce(cfg):
-                pred.energy -= cfg.predator_reproduce_cost
-                pred.reproduction_cooldown = cfg.predator_reproduction_cooldown
-                offset_dist = self.rng.uniform(5.0, 15.0)
-                offset_angle = self.rng.uniform(0, 2.0 * math.pi)
-                child = Predator(
-                    entity_id=self._next_id(),
-                    x=pred.x + math.cos(offset_angle) * offset_dist,
-                    y=pred.y + math.sin(offset_angle) * offset_dist,
-                    heading=self.rng.uniform(0, 2.0 * math.pi),
-                    speed=cfg.predator_wander_speed,
-                    initial_energy=cfg.predator_reproduce_cost,
-                )
-                child.enforce_boundaries(cfg)
-                child.reproduction_cooldown = cfg.predator_reproduction_cooldown * 0.5
-                new_predators.append(child)
-                self.metrics.total_predators_born += 1
+    @property
+    def prey_list(self) -> List[Animal]:
+        return [a for a in self.animals if a.profile.name == "rabbit"]
 
-        # 4. Integrate newborn animals
-        if new_prey:
-            self.prey_list.extend(new_prey)
-        if new_predators:
-            self.predator_list.extend(new_predators)
-
-        # 5. Clean up dead entities
-        self.prey_list = [p for p in self.prey_list if p.alive]
-        self.predator_list = [p for p in self.predator_list if p.alive]
-
-        # 6. Record metrics once per simulated second
-        if self.metrics.should_record(self.time, cfg.metrics_interval):
-            self.metrics.record_snapshot(self.time, len(self.prey_list), len(self.predator_list))
+    @property
+    def predator_list(self) -> List[Animal]:
+        return [a for a in self.animals if a.profile.name == "wolf"]
 
     @property
     def prey_count(self) -> int:
@@ -258,4 +152,101 @@ class Simulation:
 
     @property
     def is_extinct(self) -> bool:
-        return self.prey_count == 0 or self.predator_count == 0
+        return len(self.animals) == 0
+
+    def step(self, dt: float) -> None:
+        """Advances ecosystem simulation by dt seconds."""
+        self.time += dt
+        self.recent_deaths = []
+
+        # 1. Update terrain vegetation regrowth
+        self.terrain.update_regrowth(dt)
+
+        # 2. Build spatial partition
+        self.spatial_grid.clear()
+        for a in self.animals:
+            if a.alive:
+                self.spatial_grid.insert(a)
+
+        # 3. Behavioral updates & predation
+        for a in self.animals:
+            if not a.alive:
+                continue
+
+            # Threat detection: find any nearby predator that hunts this animal's species
+            threat = self.spatial_grid.find_nearest_candidate(
+                a.x, a.y, a.profile.vision_radius,
+                predicate=lambda candidate: a.profile.name in candidate.profile.diet_prey
+            )
+
+            # Quarry detection: find nearest prey that this animal eats
+            quarry = None
+            if a.profile.diet_prey:
+                quarry = self.spatial_grid.find_nearest_candidate(
+                    a.x, a.y, a.profile.vision_radius,
+                    predicate=lambda candidate: candidate.profile.name in a.profile.diet_prey
+                )
+
+            caught = a.update_behavior(
+                dt=dt,
+                terrain=self.terrain,
+                rng=self.rng,
+                threat=threat,
+                quarry=quarry,
+                world_width=self.config.world_width,
+                world_height=self.config.world_height,
+            )
+
+            if caught is not None and caught.alive:
+                caught.alive = False
+                caught.state = AnimalState.DIE
+                self.recent_deaths.append(
+                    DeathEvent(caught.profile.name, caught.x, caught.y, caught.heading, "eaten")
+                )
+                if caught.profile.name == "rabbit":
+                    self.metrics.total_prey_eaten += 1
+
+            if not a.alive:
+                cause = "starved" if a.energy <= 0 else "age"
+                self.recent_deaths.append(
+                    DeathEvent(a.profile.name, a.x, a.y, a.heading, cause)
+                )
+
+        # 4. Reproduction phase
+        species_counts: Dict[str, int] = {}
+        for a in self.animals:
+            if a.alive:
+                species_counts[a.profile.name] = species_counts.get(a.profile.name, 0) + 1
+
+        newborns: List[Animal] = []
+        for a in self.animals:
+            curr_cnt = species_counts.get(a.profile.name, 0)
+            cap = 160 if a.profile.name == "rabbit" else (40 if a.profile.name in ["wolf", "fox"] else 30)
+
+            if a.can_reproduce(curr_cnt, carrying_capacity=cap):
+                a.energy -= a.profile.reproduce_cost
+                a.reproduction_cooldown = a.profile.reproduction_cooldown
+                off_dist = self.rng.uniform(6.0, 16.0)
+                off_angle = self.rng.uniform(0, 2.0 * math.pi)
+
+                child = Animal(
+                    entity_id=self._next_id(),
+                    profile=a.profile,
+                    x=a.x + math.cos(off_angle) * off_dist,
+                    y=a.y + math.sin(off_angle) * off_dist,
+                    heading=self.rng.uniform(0, 2.0 * math.pi),
+                    home_zone=a.home_zone,
+                )
+                child.enforce_world_bounds(self.config.world_width, self.config.world_height)
+                child.reproduction_cooldown = a.profile.reproduction_cooldown * 0.5
+                newborns.append(child)
+
+        if newborns:
+            self.animals.extend(newborns)
+
+        # 5. Clean up dead entities
+        self.animals = [a for a in self.animals if a.alive]
+
+        # 6. Record snapshots
+        if self.metrics.should_record(self.time, self.config.metrics_interval):
+            self.metrics.record_snapshot(self.time, self.prey_count, self.predator_count)
