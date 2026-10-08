@@ -65,6 +65,18 @@ python -m src.main
 
 ---
 
+## 🗺️ Project Roadmap & Phased Architecture
+
+See [ROADMAP.md](ROADMAP.md) for the complete breakdown of completed milestones, what is missing, and the 6-phase expansion plan:
+- **Phase 1**: Big Terrain World, Pan/Zoom Camera & Radar Minimap
+- **Phase 2**: Click-to-Inspect Animal Card & Biome Watermarks
+- **Phase 3**: Real-Time In-Game Population Chart Overlay (`C`) & Exporter
+- **Phase 4**: Interactive Desktop Toolbar & Simulation Speed Multipliers ($1\times, 2\times, 5\times$)
+- **Phase 5**: Live Activity Feed Ticker & Floating State Emotes
+- **Phase 6**: Advanced Collective AI: Boids Herds & Wolf Pack Tactics
+
+---
+
 ## 🧪 Testing & Verification
 
 Run the full headless test suite:
