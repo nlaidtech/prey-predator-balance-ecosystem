@@ -3,8 +3,8 @@
 Decoupled visualization layer that strictly reads simulation state without
 influencing rules or logic.
 Supports multiple view modes:
-- Side-View 2.5D: Animated walk, run, attack, and die sprites with horizontal facing.
-- Top-Down: 360° rotated directional sprites.
+- Side-View 2.5D: Animated walk, run, attack, and die sprites with horizontal facing for both Prey (Rabbits) and Predators (Wolves).
+- Top-Down: 360° rotated directional sprites for both species.
 - Shapes: Debug geometric view showing vision and catch ranges.
 """
 
@@ -26,17 +26,18 @@ class ViewMode(str, Enum):
     SHAPES = "Plain Shapes & Vision Radii"
 
 
-class SpriteCache:
-    """Loads and caches shared animation frames in memory once."""
+class SpeciesSpriteSet:
+    """Manages cached animation strips and directional frames for a single species."""
 
-    def __init__(self, target_scale: float = 0.5) -> None:
+    def __init__(self, species_name: str, target_scale: float = 0.5) -> None:
+        self.species_name = species_name
         self.target_scale = target_scale
         self.anims: Dict[str, List[pygame.Surface]] = {}
         self.top_view_frames: List[pygame.Surface] = []
         self._load_sprites()
 
     def _load_sprites(self) -> None:
-        base_dir = os.path.join("assets", "sprites", "wolf")
+        base_dir = os.path.join("assets", "sprites", self.species_name)
         if not os.path.exists(base_dir):
             return
 
@@ -78,24 +79,31 @@ class SpriteCache:
                     self.top_view_frames.append(surf)
 
 
+class SpriteCache:
+    """Loads and caches shared animation frames in memory once for all species."""
+
+    def __init__(self) -> None:
+        self.wolf = SpeciesSpriteSet("wolf", target_scale=0.52)
+        self.rabbit = SpeciesSpriteSet("rabbit", target_scale=0.38)
+
+
 class Renderer:
     """Renders the ecosystem simulation state to a pygame surface."""
 
     def __init__(self, config: Config) -> None:
         self.config = config
         self.view_mode = ViewMode.SIDE_VIEW
-        self.sprite_cache = SpriteCache(target_scale=0.55)
+        self.sprite_cache = SpriteCache()
 
         # Entity visual clocks (id -> (timer, frame_idx))
         self.predator_anim_states: Dict[int, Tuple[float, int]] = {}
+        self.prey_anim_states: Dict[int, Tuple[float, int]] = {}
 
         # Colors
         self.bg_color = (24, 28, 36)
         self.prey_color = (95, 215, 120)
         self.prey_outline = (50, 160, 80)
         self.pred_shape_color = (235, 75, 60)
-        self.vision_circle_prey = (70, 190, 100, 25)
-        self.vision_circle_pred = (230, 80, 70, 30)
 
         # Pre-initialize font
         pygame.font.init()
@@ -116,7 +124,7 @@ class Renderer:
         self._draw_grid_backdrop(surface)
 
         # Draw Rabbits (Prey)
-        self._draw_prey(surface, sim)
+        self._draw_prey(surface, sim, dt)
 
         # Draw Wolves (Predators)
         self._draw_predators(surface, sim, dt)
@@ -133,38 +141,116 @@ class Renderer:
         for y in range(0, h, cell_size):
             pygame.draw.line(surface, line_color, (0, y), (w, y))
 
-    def _draw_prey(self, surface: pygame.Surface, sim: Simulation) -> None:
+    def _draw_prey(self, surface: pygame.Surface, sim: Simulation, dt: float) -> None:
+        active_ids = set()
+
         for prey in sim.prey_list:
             if not prey.alive:
                 continue
+            active_ids.add(prey.entity_id)
             px, py = int(prey.x), int(prey.y)
 
-            # Vision radius in Shapes mode
             if self.view_mode == ViewMode.SHAPES:
-                vision_surf = pygame.Surface(
-                    (int(self.config.prey_vision_radius * 2), int(self.config.prey_vision_radius * 2)),
-                    pygame.SRCALPHA,
-                )
-                pygame.draw.circle(
-                    vision_surf,
-                    (70, 190, 100, 18),
-                    (int(self.config.prey_vision_radius), int(self.config.prey_vision_radius)),
-                    int(self.config.prey_vision_radius),
-                )
-                surface.blit(
-                    vision_surf,
-                    (px - int(self.config.prey_vision_radius), py - int(self.config.prey_vision_radius)),
-                )
+                self._draw_prey_shape(surface, prey, px, py)
+            elif self.view_mode == ViewMode.TOP_DOWN:
+                self._draw_prey_top_down(surface, prey, dt, px, py)
+            else:
+                self._draw_prey_animated_side(surface, prey, dt, px, py)
 
-            # Draw rabbit as stylized glyph (body + ears facing heading)
-            body_radius = 5
-            pygame.draw.circle(surface, self.prey_color, (px, py), body_radius)
-            pygame.draw.circle(surface, self.prey_outline, (px, py), body_radius, 1)
+        # Clean up stale animation state entries
+        stale = [eid for eid in self.prey_anim_states if eid not in active_ids]
+        for eid in stale:
+            del self.prey_anim_states[eid]
 
-            # Heading indicator (ears / nose direction)
-            hx = px + int(math.cos(prey.heading) * 8)
-            hy = py + int(math.sin(prey.heading) * 8)
-            pygame.draw.line(surface, (255, 255, 255), (px, py), (hx, hy), 2)
+    def _draw_prey_shape(self, surface: pygame.Surface, prey: Prey, px: int, py: int) -> None:
+        # Vision radius in Shapes mode
+        vision_surf = pygame.Surface(
+            (int(self.config.prey_vision_radius * 2), int(self.config.prey_vision_radius * 2)),
+            pygame.SRCALPHA,
+        )
+        pygame.draw.circle(
+            vision_surf,
+            (70, 190, 100, 18),
+            (int(self.config.prey_vision_radius), int(self.config.prey_vision_radius)),
+            int(self.config.prey_vision_radius),
+        )
+        surface.blit(
+            vision_surf,
+            (px - int(self.config.prey_vision_radius), py - int(self.config.prey_vision_radius)),
+        )
+
+        # Draw rabbit as stylized glyph (body + ears facing heading)
+        body_radius = 5
+        pygame.draw.circle(surface, self.prey_color, (px, py), body_radius)
+        pygame.draw.circle(surface, self.prey_outline, (px, py), body_radius, 1)
+
+        # Heading indicator (ears / nose direction)
+        hx = px + int(math.cos(prey.heading) * 8)
+        hy = py + int(math.sin(prey.heading) * 8)
+        pygame.draw.line(surface, (255, 255, 255), (px, py), (hx, hy), 2)
+
+    def _draw_prey_animated_side(
+        self, surface: pygame.Surface, prey: Prey, dt: float, px: int, py: int
+    ) -> None:
+        anim_key = "walk"
+        frame_rate = 8.0
+
+        if prey.state == AnimalState.FLEE:
+            anim_key = "run"
+            frame_rate = 14.0
+        elif prey.state == AnimalState.DIE:
+            anim_key = "die"
+            frame_rate = 6.0
+        elif prey.speed < 5.0:
+            anim_key = "idle"
+            frame_rate = 4.0
+
+        frames = self.sprite_cache.rabbit.anims.get(anim_key, self.sprite_cache.rabbit.anims.get("walk", []))
+        if not frames:
+            self._draw_prey_shape(surface, prey, px, py)
+            return
+
+        # Advance local animation clock
+        timer, idx = self.prey_anim_states.get(prey.entity_id, (0.0, 0))
+        timer += dt
+        frame_duration = 1.0 / frame_rate
+        if timer >= frame_duration:
+            timer -= frame_duration
+            idx = (idx + 1) % len(frames)
+        self.prey_anim_states[prey.entity_id] = (timer, idx)
+
+        frame = frames[idx % len(frames)]
+
+        # Facing direction (Rabbit default faces right)
+        face_left = math.cos(prey.heading) < 0
+        if face_left:
+            frame = pygame.transform.flip(frame, True, False)
+
+        rect = frame.get_rect(center=(px, py))
+        surface.blit(frame, rect)
+
+    def _draw_prey_top_down(
+        self, surface: pygame.Surface, prey: Prey, dt: float, px: int, py: int
+    ) -> None:
+        top_frames = self.sprite_cache.rabbit.top_view_frames
+        if not top_frames:
+            self._draw_prey_animated_side(surface, prey, dt, px, py)
+            return
+
+        timer, idx = self.prey_anim_states.get(prey.entity_id, (0.0, 0))
+        timer += dt
+        if timer >= 0.12:
+            timer -= 0.12
+            idx = (idx + 1) % len(top_frames)
+        self.prey_anim_states[prey.entity_id] = (timer, idx)
+
+        base_frame = top_frames[idx % len(top_frames)]
+
+        # Rotate according to heading (sprite points up by default: -90 deg offset)
+        angle_deg = -math.degrees(prey.heading) - 90.0
+        rotated_frame = pygame.transform.rotate(base_frame, angle_deg)
+        rect = rotated_frame.get_rect(center=(px, py))
+        surface.blit(rotated_frame, rect)
 
     def _draw_predators(self, surface: pygame.Surface, sim: Simulation, dt: float) -> None:
         active_ids = set()
@@ -215,9 +301,8 @@ class Renderer:
     def _draw_predator_animated_side(
         self, surface: pygame.Surface, pred: Predator, dt: float, px: int, py: int
     ) -> None:
-        # Determine animation strip based on behavioral state
         anim_key = "walk"
-        frame_rate = 8.0  # FPS
+        frame_rate = 8.0
 
         if pred.state == AnimalState.CHASE:
             anim_key = "run"
@@ -232,9 +317,8 @@ class Renderer:
             anim_key = "idle"
             frame_rate = 4.0
 
-        frames = self.sprite_cache.anims.get(anim_key, self.sprite_cache.anims.get("walk", []))
+        frames = self.sprite_cache.wolf.anims.get(anim_key, self.sprite_cache.wolf.anims.get("walk", []))
         if not frames:
-            # Fallback to circle if sprite not found
             self._draw_predator_shape(surface, pred, px, py)
             return
 
@@ -254,7 +338,6 @@ class Renderer:
         if face_left:
             frame = pygame.transform.flip(frame, True, False)
 
-        # Center and blit
         rect = frame.get_rect(center=(px, py))
         surface.blit(frame, rect)
 
@@ -264,12 +347,11 @@ class Renderer:
     def _draw_predator_top_down(
         self, surface: pygame.Surface, pred: Predator, dt: float, px: int, py: int
     ) -> None:
-        top_frames = self.sprite_cache.top_view_frames
+        top_frames = self.sprite_cache.wolf.top_view_frames
         if not top_frames:
             self._draw_predator_animated_side(surface, pred, dt, px, py)
             return
 
-        # Animate top-down walk cycle
         timer, idx = self.predator_anim_states.get(pred.entity_id, (0.0, 0))
         timer += dt
         if timer >= 0.12:
@@ -295,7 +377,6 @@ class Renderer:
         y = top_y
 
         fill_ratio = max(0.0, min(1.0, pred.energy / self.config.predator_max_energy))
-        # Green to red color ramp based on hunger
         color = (
             int(255 * (1.0 - fill_ratio)),
             int(230 * fill_ratio),
@@ -306,7 +387,7 @@ class Renderer:
 
     def _draw_hud(self, surface: pygame.Surface, sim: Simulation, paused: bool, fps: float) -> None:
         # HUD Panel background
-        hud_w, hud_h = 480, 110
+        hud_w, hud_h = 490, 110
         hud_surf = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
         pygame.draw.rect(hud_surf, (18, 22, 28, 210), (0, 0, hud_w, hud_h), border_radius=8)
         pygame.draw.rect(hud_surf, (60, 72, 88), (0, 0, hud_w, hud_h), 1, border_radius=8)
@@ -314,7 +395,7 @@ class Renderer:
         # Text elements
         lines = [
             f"PREDATOR–PREY ECOSYSTEM  |  Time: {sim.time:5.1f}s  |  FPS: {fps:4.1f}",
-            f"Rabbits (Prey): {sim.prey_count:3d}   |  Foxes (Wolf): {sim.predator_count:3d}",
+            f"Rabbits (Prey): {sim.prey_count:3d}   |  Wolves (Predator): {sim.predator_count:3d}",
             f"View Mode: {self.view_mode.value}",
             f"Status: {'PAUSED' if paused else 'RUNNING'}  [Space: Pause | R: Reset | V: Toggle View]",
         ]
