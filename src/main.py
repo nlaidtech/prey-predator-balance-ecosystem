@@ -6,7 +6,12 @@ async compatibility for web builds (pygbag/WASM).
 
 import asyncio
 import math
+import os
 import sys
+
+# Ensure repository root is on sys.path whether executed directly or as module
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pygame
 
 from src.camera import Camera2D
