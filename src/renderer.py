@@ -177,7 +177,7 @@ class Renderer:
         self.activity_feed = ActivityFeedHUD(width=370, max_display_items=5)
 
         # Biome watermarks & boundary lines toggle (Key 'B')
-        self.show_biome_watermarks: bool = True
+        self.show_biome_watermarks: bool = False
 
         # Entity visual clocks (id -> (timer, frame_idx))
         self.anim_states: Dict[int, Tuple[float, int]] = {}
@@ -463,7 +463,7 @@ class Renderer:
                         tw, th = tile.get_width(), tile.get_height()
                         sw = max(2, int(tw * cam.zoom))
                         sh = max(2, int(th * cam.zoom))
-                        scaled_tile = self._get_scaled_tile(tile, sw, sh)
+                        scaled_tile = self._get_scaled_tile(tile, sw + 1, sh + 1)
                         c_start = int(int_min_x // tw)
                         c_end = int(int_max_x // tw) + 1
                         r_start = int(int_min_y // th)
@@ -828,14 +828,15 @@ class Renderer:
             pw = scaled_prop.get_width()
             ph = scaled_prop.get_height()
 
-        # Draw soft translucent ground drop-shadow beneath prop
-        sw = max(6, int(pw * 0.75))
-        sh = max(3, int(ph * 0.28))
-        shadow_surf = pygame.Surface((sw, sh), pygame.SRCALPHA)
-        pygame.draw.ellipse(shadow_surf, (0, 0, 0, 75), (0, 0, sw, sh))
-        surface.blit(shadow_surf, (int(sx - sw * 0.5), int(sy + ph * 0.35 - sh * 0.5)))
+        # Draw soft translucent ground drop-shadow beneath prop (except flat water foam)
+        if "foam" not in prop.prop_name:
+            sw = max(6, int(pw * 0.75))
+            sh = max(3, int(ph * 0.22))
+            shadow_surf = pygame.Surface((sw, sh), pygame.SRCALPHA)
+            pygame.draw.ellipse(shadow_surf, (0, 0, 0, 60), (0, 0, sw, sh))
+            surface.blit(shadow_surf, (int(sx - sw * 0.5), int(sy - sh * 0.5)))
 
-        rect = scaled_prop.get_rect(center=(int(sx), int(sy)))
+        rect = scaled_prop.get_rect(midbottom=(int(sx), int(sy)))
         surface.blit(scaled_prop, rect)
 
     def _draw_single_animal(self, surface: pygame.Surface, animal: Animal, sim: Simulation, dt: float, cam: Camera2D) -> None:

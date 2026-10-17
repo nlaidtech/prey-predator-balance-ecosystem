@@ -272,7 +272,7 @@ class TerrainMap:
             scale=2.3,
         ))
 
-        # 2. River: Central Circular Watering Hole Basin & Satellite Ponds
+        # 2. River: Central Circular Watering Hole Basin
         r_center_x = self.width * 0.5
         r_center_y = (river_top + river_bottom) * 0.5
         self.landmarks.append(TerrainLandmark(
@@ -281,7 +281,7 @@ class TerrainMap:
             biome_type=BiomeType.RIVER,
             x=r_center_x,
             y=r_center_y,
-            scale=2.4,
+            scale=2.2,
         ))
 
         # 3. Highlands: Cliff Plateau & Staircase Ramp
@@ -304,6 +304,30 @@ class TerrainMap:
             scale=2.4,
         ))
 
+        # 4. Dense Forest: Ancient Oak Grove
+        f_center_x = mid_x + (self.width - mid_x) * 0.5
+        f_center_y = river_top * 0.5
+        self.landmarks.append(TerrainLandmark(
+            landmark_id="forest_oak_grove",
+            landmark_name="landmark_ancient_oak_grove",
+            biome_type=BiomeType.DENSE_FOREST,
+            x=f_center_x,
+            y=f_center_y,
+            scale=2.4,
+        ))
+
+        # 5. Thickets: Briar Hollow Refuge Mound
+        t_center_x = mid_x * 0.5
+        t_center_y = river_bottom + (self.height - river_bottom) * 0.5
+        self.landmarks.append(TerrainLandmark(
+            landmark_id="thickets_briar_refuge",
+            landmark_name="landmark_briar_hollow_refuge",
+            biome_type=BiomeType.THICKETS,
+            x=t_center_x,
+            y=t_center_y,
+            scale=2.4,
+        ))
+
     def _generate_props(self) -> None:
         """Generates deterministic landscape props across all 5 biomes."""
         import random
@@ -311,36 +335,55 @@ class TerrainMap:
 
         biome_prop_pool = {
             BiomeType.HIGHLANDS: [
-                ("prop_rock_large1", 1.2), ("prop_rock_large2", 1.2),
-                ("prop_rock_slabs", 1.1), ("prop_boulder", 1.0), ("prop_pine", 1.1),
-                ("prop_cave", 1.1),
+                ("prop_highlands_rock_pyramid", 1.2),
+                ("prop_highlands_rock_throne", 1.2),
+                ("prop_highlands_rock_crags", 1.1),
+                ("prop_highlands_rock_slabs", 1.1),
+                ("prop_highlands_pine1", 1.1),
+                ("prop_highlands_pine2", 1.1),
+                ("prop_highlands_pine3", 1.1),
+                ("prop_highlands_pine4", 1.1),
+                ("prop_highlands_cave", 1.1),
             ],
             BiomeType.DENSE_FOREST: [
-                ("prop_canopy", 1.3), ("prop_tree", 1.2), ("prop_log", 1.0),
-                ("prop_stump", 1.0), ("prop_bush", 0.95),
+                ("prop_forest_ancient_oak", 1.25),
+                ("prop_forest_mossy_log", 1.05),
+                ("prop_forest_bramble", 1.0),
+                ("prop_forest_angled_log", 1.05),
+                ("prop_forest_stump", 1.0),
             ],
             BiomeType.RIVER: [
-                ("prop_pond1", 1.3), ("prop_pond2", 1.3),
-                ("prop_pond_boulders", 1.3), ("prop_foam", 0.9), ("prop_foam_swirl", 0.9),
+                ("prop_river_boulders", 1.15),
             ],
             BiomeType.THICKETS: [
-                ("prop_dense_bush1", 1.2), ("prop_dense_bush2", 1.2),
-                ("prop_dense_refuge", 1.25), ("prop_briar_barrier", 1.1),
-                ("prop_deadwood", 1.1), ("prop_berries", 1.0), ("prop_blackberry", 1.0),
+                ("prop_thickets_bramble_mound", 1.15),
+                ("prop_thickets_leafy_mound", 1.15),
+                ("prop_thickets_deadwood_log", 1.1),
+                ("prop_thickets_deadwood_roots", 1.1),
+                ("prop_thickets_thorn_barrier1", 1.05),
+                ("prop_thickets_thorn_barrier2", 1.05),
+                ("prop_thickets_berry_red", 1.0),
+                ("prop_thickets_berry_blackberry", 1.0),
+                ("prop_thickets_mossy_rocks", 1.0),
             ],
             BiomeType.MEADOW: [
-                ("prop_flowers", 1.0), ("prop_poppy", 1.0), ("prop_bluebells", 1.0),
-                ("prop_clover", 0.9), ("prop_bush", 1.0), ("prop_rock", 1.0),
-                ("prop_log", 1.0), ("prop_tree", 1.1),
+                ("prop_meadow_rock", 1.0),
+                ("prop_meadow_log", 1.0),
+                ("prop_meadow_sapling", 1.1),
+                ("prop_meadow_dandelion", 1.0),
+                ("prop_meadow_poppy", 1.0),
+                ("prop_meadow_bluebells", 1.0),
+                ("prop_meadow_bush", 1.0),
+                ("prop_meadow_clover", 0.95),
             ],
         }
 
         base_prop_counts = {
-            BiomeType.HIGHLANDS: 32,
-            BiomeType.DENSE_FOREST: 42,
-            BiomeType.RIVER: 22,
-            BiomeType.THICKETS: 38,
-            BiomeType.MEADOW: 40,
+            BiomeType.HIGHLANDS: 25,
+            BiomeType.DENSE_FOREST: 30,
+            BiomeType.RIVER: 16,
+            BiomeType.THICKETS: 25,
+            BiomeType.MEADOW: 26,
         }
 
         # Dynamically scale prop count with world dimensions for vast wilderness
