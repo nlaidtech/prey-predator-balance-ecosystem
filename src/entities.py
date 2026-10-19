@@ -79,6 +79,18 @@ class Animal(BaseSprite):
     def pos(self) -> Tuple[float, float]:
         return (self.x, self.y)
 
+    @property
+    def max_stamina(self) -> float:
+        return 100.0
+
+    @property
+    def max_thirst(self) -> float:
+        return 50.0
+
+    @property
+    def is_exhausted(self) -> bool:
+        return self.stamina < 10.0
+
     def distance_to(self, other: Animal) -> float:
         return math.hypot(other.x - self.x, other.y - self.y)
 

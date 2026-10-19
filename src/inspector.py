@@ -13,6 +13,7 @@ import pygame
 from src.camera import Camera2D
 from src.entities import Animal, AnimalState
 from src.simulation import Simulation
+from src.species import TrophicRole
 
 
 class InspectorCard:
@@ -174,13 +175,13 @@ class InspectorCard:
             card_surf.blit(frame, f_rect)
 
         # 4. AI State Badge
+        is_herbivore = (animal.profile.trophic_role == TrophicRole.HERBIVORE)
         state_colors = {
             AnimalState.WANDER: ((45, 110, 180), "WANDERING"),
-            AnimalState.GRAZE: ((45, 160, 80), "GRAZING"),
             AnimalState.CHASE: ((215, 60, 55), "CHASING (HUNT)"),
             AnimalState.FLEE: ((230, 140, 35), "FLEEING (EVADE)"),
             AnimalState.DRINK: ((35, 150, 210), "DRINKING (RIVER)"),
-            AnimalState.EAT: ((185, 55, 150), "FEASTING"),
+            AnimalState.EAT: ((45, 160, 80) if is_herbivore else (185, 55, 150), "GRAZING" if is_herbivore else "FEASTING"),
         }
         badge_col, state_str = state_colors.get(animal.state, ((100, 100, 100), animal.state.value.upper()))
         badge_rect = pygame.Rect(94, 64, 198, 24)
@@ -251,8 +252,8 @@ class InspectorCard:
             target_str = "Status: Fleeing approaching predator!"
         elif animal.state == AnimalState.DRINK:
             target_str = "Status: Rehydrating at Central River"
-        elif animal.state == AnimalState.GRAZE:
-            target_str = "Status: Grazing grass biomass"
+        elif animal.state == AnimalState.EAT:
+            target_str = "Status: Grazing grass biomass" if is_herbivore else "Status: Feeding on prey"
 
         info_box = pygame.Rect(16, 272, bar_w, 42)
         pygame.draw.rect(card_surf, (22, 28, 38), info_box, border_radius=4)
