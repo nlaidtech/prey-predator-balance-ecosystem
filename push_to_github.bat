@@ -5,9 +5,9 @@ echo ========================================================
 echo   Pushing Wildlife Ecosystem to GitHub (nlaidtech)
 echo ========================================================
 echo.
-echo Running: git push -u origin main
+echo Running: git push -u origin main --force
 echo.
-git push -u origin main
+git push -u origin main --force
 echo.
 if %ERRORLEVEL% equ 0 (
     echo ========================================================
