@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pygame
 
 from src.camera import Camera2D
-from src.config import Config
+from src.config import Config, get_resource_path
 from src.renderer import Renderer
 from src.simulation import Simulation
 
@@ -24,6 +24,16 @@ def run_loop(config: Config, is_async: bool = False):
     pygame.init()
     scr_w = getattr(config, "screen_width", 1280)
     scr_h = getattr(config, "screen_height", 720)
+
+    # Set application icon if available
+    icon_path = get_resource_path(os.path.join("assets", "icon.png"))
+    if os.path.isfile(icon_path):
+        try:
+            icon_surf = pygame.image.load(icon_path)
+            pygame.display.set_icon(icon_surf)
+        except Exception:
+            pass
+
     screen = pygame.display.set_mode((int(scr_w), int(scr_h)))
     pygame.display.set_caption("Predator–Prey Balance Ecosystem (Big Reserve World)")
     clock = pygame.time.Clock()

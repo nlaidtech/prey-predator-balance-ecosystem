@@ -17,7 +17,7 @@ import pygame
 from src.activity_feed import ActivityFeedHUD
 from src.camera import Camera2D
 from src.chart import PopulationChartHUD
-from src.config import Config, ViewMode
+from src.config import Config, ViewMode, get_resource_path
 from src.entities import Animal, AnimalState
 from src.inspector import InspectorCard
 from src.minimap import Minimap
@@ -38,7 +38,7 @@ class SpeciesSpriteSet:
         self._load_sprites()
 
     def _load_sprites(self) -> None:
-        base_dir = os.path.join("assets", "sprites", self.species_name)
+        base_dir = get_resource_path(os.path.join("assets", "sprites", self.species_name))
         if not os.path.exists(base_dir):
             return
 
@@ -99,7 +99,7 @@ class TerrainSpriteCache:
         self._load_terrain_assets()
 
     def _load_terrain_assets(self) -> None:
-        base_dir = os.path.join("assets", "terrain")
+        base_dir = get_resource_path(os.path.join("assets", "terrain"))
         if not os.path.isdir(base_dir):
             return
 

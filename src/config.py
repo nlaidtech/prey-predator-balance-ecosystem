@@ -6,6 +6,21 @@ across entities, rules, and tests.
 
 from dataclasses import dataclass
 from enum import Enum
+import os
+import sys
+
+
+def get_resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, supporting dev and PyInstaller bundle locations."""
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, relative_path)
+    if getattr(sys, "frozen", False):
+        exe_dir = os.path.dirname(sys.executable)
+        candidate = os.path.join(exe_dir, relative_path)
+        if os.path.exists(candidate):
+            return candidate
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(repo_root, relative_path)
 
 
 class ViewMode(str, Enum):
