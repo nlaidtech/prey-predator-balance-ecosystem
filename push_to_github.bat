@@ -7,7 +7,8 @@ echo ========================================================
 echo.
 echo Running: git push -u origin main --force
 echo.
-git push -u origin main --force
+git push -u origin main --force > push.log 2>&1
+type push.log
 echo.
 if %ERRORLEVEL% equ 0 (
     echo ========================================================
