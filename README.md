@@ -38,30 +38,52 @@ An agent-based wildlife ecosystem simulation modeling dynamic ecological equilib
 
 ---
 
-## 🎮 Quick Start
+---
 
-### 1. Requirements
-- Python 3.10+
-- `pygame-ce`
+## 🚀 How to Access & Play the Application
 
-Install dependencies:
+You can launch and experience the application through any of the following convenient methods:
+
+### Option 1: Desktop Shortcut (Instant Access)
+A desktop shortcut has been created directly on your Windows desktop:
+* Double-click **`Wildlife Ecosystem App`** on your Desktop.
+
+### Option 2: Standalone Windows Executable (.exe)
+The application has been compiled into a standalone Windows executable that runs without requiring Python:
+* Navigate to: [`dist/WildlifeEcosystem/WildlifeEcosystem.exe`](dist/WildlifeEcosystem/WildlifeEcosystem.exe)
+* Double-click **`WildlifeEcosystem.exe`** to start instantly.
+* To distribute to other Windows PCs, simply copy the `dist/WildlifeEcosystem` folder.
+
+### Option 3: One-Click Batch Launcher
+* Double-click [`run_game.bat`](run_game.bat) located in the project root.
+
+### Option 4: Run from Python Source
+Ensure dependencies are installed:
 ```bash
-pip install pygame-ce
-```
-
-### 2. Launch the Simulation
-Run directly:
-```bash
+pip install -r requirements.txt   # Or: pip install pygame-ce numpy pillow
 python -m src.main
 ```
-*(Or double-click `run.bat` on Windows)*
 
-### Controls
-| Key | Action |
+---
+
+## 🎮 Interactive Controls & Navigation
+
+| Control | Action |
 | :--- | :--- |
-| **`V`** | **Cycle View Mode** (Side-View Animated $\leftrightarrow$ Top-Down 360° $\leftrightarrow$ Plain Shapes) |
-| **`Space`** | **Pause / Resume** simulation |
-| **`R`** | **Reset** ecosystem with initial population |
+| **Left Click + Drag** | **Pan Reserve World**: Smoothly drag the camera anywhere across the 4800×3200 map |
+| **Mouse Wheel** (or `+` / `-`) | **Zoom**: Smooth continuous zoom from bird's-eye overview (0.25×) to close-up detail (2.0×) |
+| **Left Click on Animal** | **Inspect Animal**: Opens biometric HUD showing health, stamina, energy, age, and AI state |
+| **Left Click on Empty Ground** | **Scenic Glide**: Smoothly glides the camera to the clicked territory and closes inspector |
+| **Left Click on Minimap** | **Radar Jump**: Click anywhere on the bottom-right radar minimap to pan directly there |
+| **On-Screen Toolbar** | Click buttons to toggle **Pause**, adjust speed (**1×**, **2×**, **5×**), switch **View Mode**, toggle **Chart** / **Biomes**, or **Spawn Species** |
+| **`WASD` / Arrow Keys** | Continuous directional camera panning |
+| **`Space`** | **Pause / Resume** simulation (displays official Wildlife Ecosystem brand logo) |
+| **`C`** | Toggle **Population Dynamics Chart** overlay |
+| **`B`** | Toggle **Biome Territory Watermarks** |
+| **`V`** | Cycle **View Mode** (2.5D Animated Sprites $\leftrightarrow$ Top-Down 360° $\leftrightarrow$ Plain Shapes) |
+| **`1` / `2` / `5`** | Set simulation speed to $1\times$, $2\times$, or $5\times$ turbo |
+| **`R`** | **Reset World**: Re-seeds terrain and animal populations |
+| **`Esc`** | Deselect active animal card (or quit if no card is open) |
 
 ---
 
