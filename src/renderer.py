@@ -215,11 +215,42 @@ class Renderer:
         self.ripples: List[Dict] = []
         self.scenic_banner: Optional[Dict] = None
 
+        # Logo branding assets (emblem badge and banner)
+        self.logo_banner: Optional[pygame.Surface] = None
+        self.logo_badge: Optional[pygame.Surface] = None
+        self._load_logo_assets()
+
         # Scaled tile cache for high-performance ground rendering
         self._scaled_tile_cache: Dict[Tuple[int, int, int], pygame.Surface] = {}
 
         # Precompute procedural landscape decor (wildflowers, crags, dappled light)
         self._init_procedural_decor(config.world_width, config.world_height)
+
+    def _load_logo_assets(self) -> None:
+        """Loads brand logo assets for HUD and game overlays."""
+        badge_path = get_resource_path(os.path.join("assets", "logo_badge.png"))
+        if os.path.isfile(badge_path):
+            try:
+                badge_surf = pygame.image.load(badge_path)
+                try:
+                    badge_surf = badge_surf.convert_alpha()
+                except pygame.error:
+                    pass
+                self.logo_badge = pygame.transform.smoothscale(badge_surf, (44, 44))
+            except Exception:
+                pass
+
+        logo_path = get_resource_path(os.path.join("assets", "logo.png"))
+        if os.path.isfile(logo_path):
+            try:
+                banner_surf = pygame.image.load(logo_path)
+                try:
+                    banner_surf = banner_surf.convert_alpha()
+                except pygame.error:
+                    pass
+                self.logo_banner = banner_surf
+            except Exception:
+                pass
 
     def _get_scaled_tile(self, surf: pygame.Surface, width: int, height: int) -> pygame.Surface:
         """Retrieves or caches a smoothscaled tile surface for current dimensions."""
@@ -974,8 +1005,17 @@ class Renderer:
 
         hud_w, hud_h = 700, 118
         hud_surf = pygame.Surface((hud_w, hud_h), pygame.SRCALPHA)
-        pygame.draw.rect(hud_surf, (16, 20, 26, 225), (0, 0, hud_w, hud_h), border_radius=8)
+        pygame.draw.rect(hud_surf, (16, 20, 26, 230), (0, 0, hud_w, hud_h), border_radius=8)
         pygame.draw.rect(hud_surf, (55, 68, 85), (0, 0, hud_w, hud_h), 1, border_radius=8)
+
+        text_offset_x = 14
+        if self.logo_badge is not None:
+            # Draw logo emblem badge container with glowing gold border
+            badge_plate = pygame.Rect(10, 10, 48, 48)
+            pygame.draw.rect(hud_surf, (22, 34, 28), badge_plate, border_radius=8)
+            pygame.draw.rect(hud_surf, (212, 175, 55), badge_plate, width=1, border_radius=8)
+            hud_surf.blit(self.logo_badge, (12, 12))
+            text_offset_x = 66
 
         line1 = f"WILDLIFE ECOSYSTEM  |  Time: {sim.time:5.1f}s  |  FPS: {fps:4.1f}  |  Zoom: {cam.zoom:.2f}x"
         line2 = (
@@ -990,16 +1030,44 @@ class Renderer:
         line3 = f"View: {self.view_mode.value}  |  Camera: ({cam.x:.0f}, {cam.y:.0f}) [{follow_str}]"
         line4 = f"[Click] Toolbar / Animal | [1/2/5] Speed | [C] Chart | [B] Biomes | [V] View | [Space] Pause"
 
-        for i, (text, col) in enumerate([
-            (line1, (245, 245, 245)),
-            (line2, (110, 230, 140)),
-            (line3, (255, 200, 80)),
-            (line4, (165, 180, 195)),
-        ]):
-            txt_surf = self.font.render(text, True, col)
-            hud_surf.blit(txt_surf, (14, 10 + i * 23))
+        # Line 1: Header title in ivory
+        txt_surf1 = self.font.render(line1, True, (245, 245, 245))
+        hud_surf.blit(txt_surf1, (text_offset_x, 10))
+
+        # Line 2: Species counts in vibrant emerald
+        txt_surf2 = self.font.render(line2, True, (110, 230, 140))
+        hud_surf.blit(txt_surf2, (text_offset_x, 34))
+
+        # Lines 3 and 4: Coordinates and controls
+        txt_surf3 = self.font.render(line3, True, (255, 200, 80))
+        hud_surf.blit(txt_surf3, (14, 64))
+
+        txt_surf4 = self.font.render(line4, True, (165, 180, 195))
+        hud_surf.blit(txt_surf4, (14, 88))
 
         surface.blit(hud_surf, (16, 16))
+
+        # Draw centered Brand Logo & Pause Card when paused
+        if paused and self.logo_banner is not None:
+            sc_w, sc_h = cam.screen_width, cam.screen_height
+            overlay = pygame.Surface((sc_w, sc_h), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 100))
+            surface.blit(overlay, (0, 0))
+
+            lw, lh = self.logo_banner.get_width(), self.logo_banner.get_height()
+            lx = (sc_w - lw) // 2
+            ly = int(sc_h * 0.26)
+            surface.blit(self.logo_banner, (lx, ly))
+
+            p_text = self.banner_font.render("SIMULATION PAUSED  \u2014  Press SPACE or Click PLAY to Resume", True, (255, 225, 120))
+            px = (sc_w - p_text.get_width()) // 2
+            py = ly + lh + 14
+
+            p_bg = pygame.Surface((p_text.get_width() + 24, p_text.get_height() + 10), pygame.SRCALPHA)
+            pygame.draw.rect(p_bg, (14, 20, 26, 230), (0, 0, p_bg.get_width(), p_bg.get_height()), border_radius=6)
+            pygame.draw.rect(p_bg, (212, 175, 55), (0, 0, p_bg.get_width(), p_bg.get_height()), width=1, border_radius=6)
+            surface.blit(p_bg, (px - 12, py - 5))
+            surface.blit(p_text, (px, py))
 
     def _draw_animal_emotes(self, surface: pygame.Surface, sim: Simulation, cam: Camera2D) -> None:
         """Renders floating state badges (!, 💧, 💨, ❤️) directly above living animals in camera view."""
