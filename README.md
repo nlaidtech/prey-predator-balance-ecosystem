@@ -1,6 +1,38 @@
 # Wildlife Ecosystem Simulation: Predator–Prey Balance
 
-An agent-based wildlife ecosystem simulation modeling dynamic ecological equilibrium between 6 species across 5 territorial biomes. Built with a decoupled headless Python simulation core and `pygame-ce` multi-mode visualization.
+[![Play Online in Browser](https://img.shields.io/badge/Play%20Online-GitHub%20Pages-brightgreen?style=for-the-badge&logo=googlechrome)](https://nlaidtech.github.io/prey-predator-balance-ecosystem/)
+[![Download Windows Application](https://img.shields.io/badge/Download-Windows%20App%20(.zip)-blue?style=for-the-badge&logo=windows)](https://github.com/nlaidtech/prey-predator-balance-ecosystem/releases/download/v1.0.0/WildlifeEcosystem-Windows-x64.zip)
+[![Latest Release](https://img.shields.io/github/v/release/nlaidtech/prey-predator-balance-ecosystem?style=for-the-badge&color=orange)](https://github.com/nlaidtech/prey-predator-balance-ecosystem/releases/tag/v1.0.0)
+
+An agent-based wildlife ecosystem simulation modeling dynamic ecological equilibrium between 6 species across 5 territorial biomes. Built with a decoupled headless Python simulation core, high-performance `pygame-ce` 2.5D visualization, and WebAssembly in-browser play.
+
+---
+
+## 🚀 How to Access & Play the Application
+
+> [!NOTE]
+> **Visiting this repository on GitHub?**  
+> GitHub is a source-code host and cannot execute `.exe` binaries or Python scripts directly inside the file viewer.  
+> Use **Option 1** to play instantly in your browser, or **Option 2** to download the standalone Windows application!
+
+### Option 1: Play Instantly in Your Web Browser (No Install Needed)
+* Click here to play directly: **[https://nlaidtech.github.io/prey-predator-balance-ecosystem/](https://nlaidtech.github.io/prey-predator-balance-ecosystem/)**
+* Runs directly in any modern browser (Chrome, Edge, Firefox, Safari) using WebAssembly / Pygbag.
+
+### Option 2: Download Standalone Windows Executable (.exe)
+Pre-compiled for Windows 10 & 11 — **no Python or libraries required**:
+1. Download: **[WildlifeEcosystem-Windows-x64.zip](https://github.com/nlaidtech/prey-predator-balance-ecosystem/releases/download/v1.0.0/WildlifeEcosystem-Windows-x64.zip)** (from [GitHub Releases v1.0.0](https://github.com/nlaidtech/prey-predator-balance-ecosystem/releases/tag/v1.0.0)).
+2. Extract the `.zip` archive on your PC.
+3. Double-click **`WildlifeEcosystem.exe`** to start instantly!
+
+### Option 3: Run on Local PC (For Developers / Cloned Repository)
+* **Desktop Shortcut**: Double-click **`Wildlife Ecosystem App`** on your Desktop.
+* **One-Click Batch Launcher**: Double-click [`run_game.bat`](run_game.bat) in the project folder.
+* **Python CLI**:
+  ```bash
+  pip install -r requirements.txt
+  python main.py
+  ```
 
 ---
 
@@ -34,34 +66,6 @@ An agent-based wildlife ecosystem simulation modeling dynamic ecological equilib
 │  Residents: 🦊 Foxes & 🐇 Rabbits     │  Residents: 🦌 Deer Herds & 🐇 Rabbits│
 │  Prey refuge: Obstruction to wolves   │  Rich grass pastures, open sprinting  │
 └───────────────────────────────────────┴───────────────────────────────────────┘
-```
-
----
-
----
-
-## 🚀 How to Access & Play the Application
-
-You can launch and experience the application through any of the following convenient methods:
-
-### Option 1: Desktop Shortcut (Instant Access)
-A desktop shortcut has been created directly on your Windows desktop:
-* Double-click **`Wildlife Ecosystem App`** on your Desktop.
-
-### Option 2: Standalone Windows Executable (.exe)
-The application has been compiled into a standalone Windows executable that runs without requiring Python:
-* Navigate to: [`dist/WildlifeEcosystem/WildlifeEcosystem.exe`](dist/WildlifeEcosystem/WildlifeEcosystem.exe)
-* Double-click **`WildlifeEcosystem.exe`** to start instantly.
-* To distribute to other Windows PCs, simply copy the `dist/WildlifeEcosystem` folder.
-
-### Option 3: One-Click Batch Launcher
-* Double-click [`run_game.bat`](run_game.bat) located in the project root.
-
-### Option 4: Run from Python Source
-Ensure dependencies are installed:
-```bash
-pip install -r requirements.txt   # Or: pip install pygame-ce numpy pillow
-python -m src.main
 ```
 
 ---
